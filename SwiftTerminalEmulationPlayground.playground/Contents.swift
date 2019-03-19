@@ -21,6 +21,11 @@ class Shell {
         self.process!.standardOutput = slaveFile
         self.process!.standardInput = slaveFile
         self.process!.standardError = slaveFile
+        
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(printOutput(_:)),
+                                               name: FileHandle.readCompletionNotification,
+                                               object: self.masterFile!)
     }
     
     func run() {
@@ -49,9 +54,21 @@ class Shell {
     func write(_ string: String) {
         if self.running {
             let modifiedString = string+"\u{0D}"
+            let length: Int = {
+                let cstring = modifiedString.cString(using: String.Encoding.utf8)
+                return cstring!.count
+            }()
             let data = modifiedString.data(using: String.Encoding.utf8)
             self.masterFile!.write(data!)
+            _ = self.masterFile!.readData(ofLength: length) // throw away echo.
+            self.masterFile!.readInBackgroundAndNotify()
         }
+    }
+    
+    @objc func printOutput(_ notification: Notification) {
+        let data = notification.userInfo![NSFileHandleNotificationDataItem] as! Data
+        let outputString = String(data: data, encoding: String.Encoding.utf8)
+        print(outputString!)
     }
     
     deinit {
@@ -65,5 +82,4 @@ let shell = Shell()
 shell.run()
 print(shell.read()!)
 shell.write("uptime")
-sleep(1)
-print(shell.read()!)
+
